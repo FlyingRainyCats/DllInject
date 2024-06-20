@@ -139,7 +139,6 @@
     <ClCompile Include="PEHelper.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="InjectDll.h" />
     <ClInclude Include="PEHelper.h" />
   </ItemGroup>
   <ItemGroup>

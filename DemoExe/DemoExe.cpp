@@ -3,13 +3,12 @@
 
 #include <iostream>
 
-int main()
-{
-    std::cout << "Hello World!\n";
+int main() {
+  std::cout << "Hello World!\n";
 
-    std::string data;
-    while (true) {
-        std::cin >> data;
-        printf_s("echo: %s\n", data.c_str());
-    }
+  std::string data;
+  while (true) {
+    std::cin >> data;
+    printf_s("echo: %s\n", data.c_str());
+  }
 }
