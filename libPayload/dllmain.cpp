@@ -58,12 +58,10 @@ __forceinline void* GetDllHandle(const wchar_t* name) {
   LIST_ENTRY* list = &peb->Ldr->InMemoryOrderModuleList;
 
   for (auto link = list->Flink; link != list; link = link->Flink) {
-    PLDR_DATA_TABLE_ENTRY entry =
-        CONTAINING_RECORD(link, LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks);
+    PLDR_DATA_TABLE_ENTRY entry = CONTAINING_RECORD(link, LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks);
 
     // Search for NTDLL
-    size_t len =
-        entry->FullDllName.Length / sizeof(entry->FullDllName.Buffer[0]);
+    size_t len = entry->FullDllName.Length / sizeof(entry->FullDllName.Buffer[0]);
     const wchar_t* name_p = &entry->FullDllName.Buffer[len];
     while (name_p[-1] != L'\\')
       name_p--;
@@ -75,9 +73,7 @@ __forceinline void* GetDllHandle(const wchar_t* name) {
   return nullptr;
 }
 
-__forceinline void* FindExport(void* base,
-                               PIMAGE_EXPORT_DIRECTORY pEAT,
-                               char* name) {
+__forceinline void* FindExport(void* base, PIMAGE_EXPORT_DIRECTORY pEAT, char* name) {
   if (pEAT == nullptr) {
     return nullptr;
   }
@@ -98,26 +94,34 @@ __forceinline void* FindExport(void* base,
   return nullptr;
 }
 
+struct MyString {
+  USHORT Length;
+  USHORT MaximumLength;
+  wchar_t p[1];
+};
+
 typedef NTSTATUS(NTAPI* tLdrLoadDll)(_In_opt_ PWSTR DllPath,
                                      _In_opt_ PULONG DllCharacteristics,
                                      _In_ PUNICODE_STRING DllName,
                                      _Out_ PVOID* DllHandle);
 
-extern "C" __declspec(dllexport) void* __fastcall NtdllLdrLoadDll(
-    PUNICODE_STRING dllName) {
+extern "C" __declspec(dllexport) void* __fastcall NtdllLdrLoadDll(MyString* str) {
+  UNICODE_STRING dllName{
+      str->Length,
+      str->MaximumLength,
+      &str->p[0],
+  };
   wchar_t szNtdll[] = {L'N', L'T', L'D', L'L', L'L', L'.', L'D', L'L', L'L', 0};
   char szLdrLoadDll[] = {'L', 'd', 'r', 'L', 'o', 'a', 'd', 'D', 'l', 'l', 0};
   auto* peNtdll = (uint8_t*)GetDllHandle(szNtdll);
   if (peNtdll) {
-    auto& pOptHeader =
-        PIMAGE_NT_HEADERS(peNtdll + PIMAGE_DOS_HEADER(peNtdll)->e_lfanew)
-            ->OptionalHeader;
+    auto& pOptHeader = PIMAGE_NT_HEADERS(peNtdll + PIMAGE_DOS_HEADER(peNtdll)->e_lfanew)->OptionalHeader;
     auto& pEATTable = pOptHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
     auto pEAT = PIMAGE_EXPORT_DIRECTORY(peNtdll + pEATTable.VirtualAddress);
     auto LdrLoadDllFn = (tLdrLoadDll)FindExport(peNtdll, pEAT, szLdrLoadDll);
     if (LdrLoadDllFn) {
       void* handle{nullptr};
-      LdrLoadDllFn(nullptr, nullptr, dllName, &handle);
+      LdrLoadDllFn(nullptr, nullptr, &dllName, &handle);
       return handle;
     }
   }
@@ -125,9 +129,11 @@ extern "C" __declspec(dllexport) void* __fastcall NtdllLdrLoadDll(
   return nullptr;
 }
 
-BOOL APIENTRY DllMain(HMODULE hModule,
-                      DWORD ul_reason_for_call,
-                      LPVOID lpReserved) {
+extern "C" __declspec(dllexport) DWORD WINAPI MyDummyThreadProc(_In_ LPVOID lpParameter) {
+  return 100;
+}
+
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
   switch (ul_reason_for_call) {
     case DLL_PROCESS_ATTACH:
     case DLL_THREAD_ATTACH:

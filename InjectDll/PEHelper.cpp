@@ -4,8 +4,11 @@
 #include <Windows.h>
 #include <tlhelp32.h>
 
-std::vector<uint32_t> PEHelper::Win32Process::FindProcessIdByName(
-    const wchar_t* name) {
+std::atomic<int> PEHelper::Win32Process::init_guard_{0};
+PEHelper::tIsWowProcess2 PEHelper::Win32Process::fnIsWowProcess2{nullptr};
+PEHelper::tVirtualAlloc2 PEHelper::Win32Process::fnVirtualAlloc2{nullptr};
+
+std::vector<uint32_t> PEHelper::Win32Process::FindProcessIdByName(const wchar_t* name) {
   std::vector<uint32_t> pids{};
   PROCESSENTRY32 pe{};
   pe.dwSize = sizeof(pe);
@@ -22,43 +25,68 @@ std::vector<uint32_t> PEHelper::Win32Process::FindProcessIdByName(
   return pids;
 }
 
-typedef decltype(&IsWow64Process2) tIsWowProcess2;
+USHORT PEHelper::Win32Process::GetProcessArchFromProcess() const {
+  if (fnIsWowProcess2) {
+    USHORT process_machine{IMAGE_FILE_MACHINE_UNKNOWN};
+    USHORT native_machine{IMAGE_FILE_MACHINE_UNKNOWN};
 
-PEHelper::Win32Process::Win32Process(uint32_t pid) {
-  hProcess_ = OpenProcess(PROCESS_VM_READ | PROCESS_VM_WRITE |
-                              PROCESS_VM_OPERATION | PROCESS_QUERY_INFORMATION,
-                          FALSE, pid);
-  auto IsWow64Process2fn = (tIsWowProcess2)GetProcAddress(
-      GetModuleHandle(TEXT("kernel32.dll")), "IsWow64Process2");
-  if (IsWow64Process2fn != nullptr) {
-    IsWow64Process2fn(hProcess_, &machine_type_, nullptr);
-  } else {
-    // Fallback to older OS (Win7?)
-    SYSTEM_INFO info{};
-    GetNativeSystemInfo(&info);
-    BOOL isWow64{false};
-    if (IsWow64Process(hProcess_, &isWow64)) {
-      const auto& arch = info.wProcessorArchitecture;
-
-      // 32 bit, or 32-bit process running under WoW64.
-      auto isProcessX86 = arch == PROCESSOR_ARCHITECTURE_INTEL ||
-                          (arch == PROCESSOR_ARCHITECTURE_AMD64 && isWow64);
-      machine_type_ =
-          isProcessX86 ? IMAGE_FILE_MACHINE_I386 : IMAGE_FILE_MACHINE_AMD64;
+    // When not running under WoW64, process_machine is "IMAGE_FILE_MACHINE_UNKNOWN".
+    // We should use the value from native_machine instead.
+    if (fnIsWowProcess2(hProcess_, &process_machine, &native_machine)) {
+      return process_machine == IMAGE_FILE_MACHINE_UNKNOWN ? native_machine : process_machine;
     }
   }
+
+  // Fallback to older OS (Win7?)
+  SYSTEM_INFO info{};
+  GetNativeSystemInfo(&info);
+  BOOL isWow64{false};
+  if (IsWow64Process(hProcess_, &isWow64)) {
+    const auto& arch = info.wProcessorArchitecture;
+
+    // 32 bit, or 32-bit process running under WoW64.
+    auto isProcessX86 = arch == PROCESSOR_ARCHITECTURE_INTEL || (arch == PROCESSOR_ARCHITECTURE_AMD64 && isWow64);
+    return isProcessX86 ? IMAGE_FILE_MACHINE_I386 : IMAGE_FILE_MACHINE_AMD64;
+  }
+
+  return IMAGE_FILE_MACHINE_UNKNOWN;
 }
 
-void* PEHelper::Win32Process::SetupShellCode(const uint8_t* code, size_t len) {
-  size_t unused{0};
-  void* ptr = VirtualAllocEx(hProcess_, nullptr, len, MEM_COMMIT | MEM_RESERVE,
-                             PAGE_EXECUTE_READ);
-  if (ptr)
-    WriteProcessMemory(hProcess_, ptr, code, len, &unused);
-  return ptr;
+PEHelper::Win32Process::Win32Process(uint32_t pid) {
+  if (init_guard_.fetch_add(1) == 0) {
+    if (auto hKernel32 = LoadLibraryA("kernel32.dll")) {
+      fnIsWowProcess2 = (tIsWowProcess2)GetProcAddress(hKernel32, "IsWow64Process2");
+      fnVirtualAlloc2 = (tVirtualAlloc2)GetProcAddress(hKernel32, "VirtualAlloc2");
+    }
+
+    // Try again from kernelbase :)
+    if (fnVirtualAlloc2 == nullptr) {
+      if (auto hKernelBase = LoadLibraryA("kernelbase.dll")) {
+        fnVirtualAlloc2 = (tVirtualAlloc2)GetProcAddress(hKernelBase, "VirtualAlloc2");
+      }
+    }
+  }
+
+  hProcess_ =
+      OpenProcess(PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_VM_OPERATION | PROCESS_QUERY_INFORMATION, FALSE, pid);
+  machine_type_ = GetProcessArchFromProcess();
+}
+
+std::unique_ptr<PEHelper::Win32MemoryAlloc> PEHelper::Win32Process::SetupShellCode(const uint8_t* code, size_t len) {
+  auto remote_ptr = std::make_unique<PEHelper::Win32MemoryAlloc>(hProcess_, len, PAGE_EXECUTE_READ);
+
+  if (auto ptr = remote_ptr->Get()) {
+    SIZE_T bytes_written{};
+    WriteProcessMemory(hProcess_, ptr, code, len, &bytes_written);
+
+    if (bytes_written == len) {
+      return remote_ptr;
+    }
+  }
+
+  return {};
 }
 
 HANDLE PEHelper::Win32Process::CreateThread(void* ptr, void* param) {
-  return CreateRemoteThread(hProcess_, nullptr, 0x40,
-                            LPTHREAD_START_ROUTINE(ptr), param, 0, nullptr);
+  return CreateRemoteThread(hProcess_, nullptr, 0x40, LPTHREAD_START_ROUTINE(ptr), param, 0, nullptr);
 }

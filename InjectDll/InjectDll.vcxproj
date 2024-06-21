@@ -136,10 +136,15 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="InjectDll.cpp" />
+    <ClCompile Include="Payload_x64.cpp" />
+    <ClCompile Include="Payload_x86.cpp" />
     <ClCompile Include="PEHelper.cpp" />
+    <ClCompile Include="Win32Memory.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Payload.h" />
     <ClInclude Include="PEHelper.h" />
+    <ClInclude Include="Win32Memory.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\README.md" />

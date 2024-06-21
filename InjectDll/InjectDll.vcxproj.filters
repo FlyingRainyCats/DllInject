@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Payload">
+      <UniqueIdentifier>{0cad154c-8721-4566-ad4d-aa0f33d5a507}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="InjectDll.cpp">
@@ -21,9 +24,24 @@
     <ClCompile Include="PEHelper.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="Payload_x64.cpp">
+      <Filter>Payload</Filter>
+    </ClCompile>
+    <ClCompile Include="Payload_x86.cpp">
+      <Filter>Payload</Filter>
+    </ClCompile>
+    <ClCompile Include="Win32Memory.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="PEHelper.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Payload.h">
+      <Filter>Payload</Filter>
+    </ClInclude>
+    <ClInclude Include="Win32Memory.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
