@@ -48,4 +48,9 @@
   <ItemGroup>
     <None Include="..\README.md" />
   </ItemGroup>
+  <ItemGroup>
+    <MASM Include="WoW64_CreateRemoteThread.asm">
+      <Filter>Payload</Filter>
+    </MASM>
+  </ItemGroup>
 </Project>

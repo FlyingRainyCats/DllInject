@@ -95,18 +95,23 @@ int main_unicode(int argc, wchar_t** argv) {
     fprintf_s(stderr, "Ready: %p\n", remote_ptr->Get());
     remote_ptr->KeepMemory();
   } else {
-    // NOTE: CreateRemoteThread from WoW64 to native x64 process (Heaven's gate + reflection, Out of Scope):
-    //       https://github.com/OpenWireSec/metasploit/blob/199956b/external/source/meterpreter/source/common/arch/win/i386/base_inject.c#L342
-
     auto ptr = remote_ptr->Get();
+    remote_ptr->KeepMemory();
     fprintf_s(stderr, "Running: %p\n", ptr);
 
-    HANDLE hThread = proc.CreateThread(ptr, nullptr);
+    uint32_t thread_error{};
+    HANDLE hThread = proc.CreateThread(ptr, nullptr, thread_error);
+    if (thread_error != 0) {
+      fprintf_s(stderr, "WoW64_CreateRemoteThread failed: %08x\n", thread_error);
+      return 8;
+    }
+
     if (hThread == nullptr || hThread == INVALID_HANDLE_VALUE) {
-      fprintf_s(stderr, "ERROR: could not create remote thread (WoW64 -> Win64 Process?).\n");
+      fprintf_s(stderr, "ERROR: could not create remote thread.\n");
       return 7;
     }
-    WaitForSingleObject(hThread, INFINITE);
+
+    auto wait_result = WaitForSingleObject(hThread, INFINITE);
     DWORD exitCode{0};
     if (GetExitCodeThread(hThread, &exitCode)) {
       fprintf_s(stderr, "module available at: 0x%08x\n", (exitCode));

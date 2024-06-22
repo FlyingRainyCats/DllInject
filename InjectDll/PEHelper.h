@@ -20,7 +20,11 @@ class Win32Process {
   inline bool IsProcessAarch64() const { return machine_type_ == IMAGE_FILE_MACHINE_ARM64; }
   inline uint16_t GetProcessType() const { return machine_type_; }
   std::unique_ptr<Win32MemoryAlloc> SetupShellCode(const uint8_t* code, size_t len);
-  HANDLE CreateThread(void* ptr, void* param);
+  HANDLE CreateThread(void* ptr, void* param, uint32_t& error_code);
+  inline HANDLE CreateThread(void* ptr, void* param) {
+    uint32_t dummy{};
+    return CreateThread(ptr, param, dummy);
+  }
 
  private:
   HANDLE hProcess_;

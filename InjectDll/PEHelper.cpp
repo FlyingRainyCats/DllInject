@@ -67,8 +67,9 @@ PEHelper::Win32Process::Win32Process(uint32_t pid) {
     }
   }
 
-  hProcess_ =
-      OpenProcess(PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_VM_OPERATION | PROCESS_QUERY_INFORMATION, FALSE, pid);
+  constexpr DWORD kAccess =
+      PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_VM_OPERATION | PROCESS_QUERY_INFORMATION | PROCESS_CREATE_THREAD;
+  hProcess_ = OpenProcess(kAccess, FALSE, pid);
   machine_type_ = GetProcessArchFromProcess();
 }
 
@@ -87,6 +88,29 @@ std::unique_ptr<PEHelper::Win32MemoryAlloc> PEHelper::Win32Process::SetupShellCo
   return {};
 }
 
-HANDLE PEHelper::Win32Process::CreateThread(void* ptr, void* param) {
-  return CreateRemoteThread(hProcess_, nullptr, 0x40, LPTHREAD_START_ROUTINE(ptr), param, 0, nullptr);
+#ifndef _WIN64
+EXTERN_C uint32_t WoW64_CreateRemoteThread(HANDLE hProcess, void* ptr, HANDLE* hThread);
+#endif
+
+HANDLE PEHelper::Win32Process::CreateThread(void* ptr, void* param, uint32_t& error_code) {
+  HANDLE hThread{};
+  error_code = 0;
+
+#if !defined(_WIN64) && defined(USE_WOW64_INJECT)
+  // Are we trying to inject from WoW64 to Native X64
+  if (IsProcessX64()) {
+    uint32_t status = WoW64_CreateRemoteThread(hProcess_, ptr, &hThread);
+    error_code = status;
+    if (SUCCEEDED(status)) {
+      return hThread;
+    }
+    return nullptr;
+  }
+#endif
+
+  hThread = CreateRemoteThread(hProcess_, nullptr, 0x40, LPTHREAD_START_ROUTINE(ptr), param, 0, nullptr);
+  if (hThread == nullptr) {
+    error_code = GetLastError();
+  }
+  return hThread;
 }

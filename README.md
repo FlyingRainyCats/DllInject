@@ -38,6 +38,14 @@ DLL 注入代码尝试。
 
 如 Windows Defender 能直接行为识别：`Behavior:Win32/DefenseEvasion.A!ml`。
 
+## 支持的注入方法
+
+- x64 注入器 -> 注入 x64 进程
+- x64 注入器 -> 注入 x86 (WoW64) 进程
+- x86 注入器 -> 注入 x86 (WoW64) 进程
+- (实验性，带上 `USE_WOW64_INJECT` 编译) x86 注入器 -> 注入 x64 进程，注入成功但是本体会崩溃，原因未知。
+  - 利用天堂之门实现。
+
 ## License
 
 MIT License + 【日后你若是惹出祸来，不把为师说出来即可】
